@@ -18,7 +18,7 @@ pre {
 
 pre span {
   display: block;
-  line-height: 1.5rem;
+  line-height: 1.2rem;
 }
 
 pre span:before {
@@ -28,7 +28,9 @@ pre span:before {
   border-right: 1px solid #ddd;
   padding: 0 .5em;
   margin-right: .5em;
-  color: #888
+  text-align: right;
+  color: #888;
+  width: 1.5em;
 }
 
 pre a:link, pre a:visited {
