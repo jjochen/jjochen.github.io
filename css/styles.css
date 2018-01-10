@@ -30,3 +30,13 @@ pre span:before {
   margin-right: .5em;
   color: #888
 }
+
+pre a:link, pre a:visited {
+  color: #555;
+  text-decoration: underline;
+}
+
+pre a:hover, pre a:active {
+  color: #888;
+  text-decoration: underline;
+}
