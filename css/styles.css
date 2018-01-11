@@ -1,13 +1,13 @@
 
 body {
+  font-family: monospace;
   background-color: #eee;
   color: #555;
 }
 
 pre {
-  font-family: monospace;
   background-color: #fff;
-  width: 42em;
+  width: 40em;
   margin: 4em auto;
   padding: 0.5em;
   border-radius: .25em;
