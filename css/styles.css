@@ -7,8 +7,8 @@ body {
 
 pre {
   background-color: #fff;
-  width: 40em;
-  margin: 4em auto;
+  width: 395pt;
+  margin: 40pt auto;
   padding: 0.5em;
   border-radius: .25em;
   box-shadow: .1em .1em .5em rgba(0,0,0,.45);
@@ -41,4 +41,16 @@ pre a:link, pre a:visited {
 pre a:hover, pre a:active {
   color: #888;
   text-decoration: underline;
+}
+
+@media (max-width: 450pt) {
+  pre {
+    width: 90%;
+  }
+
+  pre span:before {
+    padding: 0 .2em;
+    margin-right: 0;
+    width: 1.3em;
+  }
 }
