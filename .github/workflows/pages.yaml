@@ -1,0 +1,73 @@
+name: Pages
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  repository_dispatch:
+    types: [antivirus-web-published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Verify Pages artifact staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Validate shell scripts and preservation of the homepage
+        run: |
+          bash -n tool/prepare_pages.sh tool/test_prepare_pages.sh
+          bash tool/test_prepare_pages.sh
+
+  deploy:
+    name: Deploy homepage and latest protected AntiVirus release
+    needs: checks
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Stage the homepage and latest published Web build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTIVIRUS_WEB_ENABLED: ${{ vars.ANTIVIRUS_WEB_ENABLED || 'true' }}
+        run: |
+          case "$ANTIVIRUS_WEB_ENABLED" in
+            true|false) ;;
+            *) echo 'ANTIVIRUS_WEB_ENABLED must be true or false.' >&2; exit 1 ;;
+          esac
+          archive_path=-
+          release_tag=
+          if [[ "$ANTIVIRUS_WEB_ENABLED" == true ]]; then
+            release_tag=$(gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq 'add | map(select(.draft == false and .prerelease == false and (.tag_name | test("^antivirus-[0-9]+-[0-9]+$")))) | sort_by(.published_at) | last | .tag_name // empty')
+            if [[ -n "$release_tag" ]]; then
+              gh release download "$release_tag" --repo "$GITHUB_REPOSITORY" \
+                --pattern antivirus-web.tar.gz --dir "$RUNNER_TEMP/antivirus-download"
+              archive_path="$RUNNER_TEMP/antivirus-download/antivirus-web.tar.gz"
+            fi
+          fi
+          bash tool/prepare_pages.sh "$archive_path" "$RUNNER_TEMP/pages"
+          echo "AntiVirus release: ${release_tag:-none (homepage only)}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - name: Upload the complete website
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/pages/
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
