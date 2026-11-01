@@ -19,11 +19,12 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Validate shell scripts and preservation of the homepage
         run: |
-          bash -n tool/prepare_pages.sh tool/test_prepare_pages.sh
+          for script in tool/*.sh; do bash -n "$script"; done
           bash tool/test_prepare_pages.sh
+          bash tool/test_select_bundles.sh
 
   deploy:
-    name: Deploy homepage and latest static bundle
+    name: Deploy homepage and latest primary and preview bundles
     needs: checks
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -39,7 +40,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - name: Stage the homepage and latest published Web build
+      - name: Stage the homepage and latest published Web builds
         env:
           GH_TOKEN: ${{ github.token }}
           STATIC_BUNDLE_ENABLED: ${{ vars.STATIC_BUNDLE_ENABLED || 'true' }}
@@ -48,20 +49,26 @@ jobs:
             true|false) ;;
             *) echo 'STATIC_BUNDLE_ENABLED must be true or false.' >&2; exit 1 ;;
           esac
-          archive_path=-
-          release_tag=
+          archive_paths=(- -)
+          selection='{"production":"","staging":""}'
           if [[ "$STATIC_BUNDLE_ENABLED" == true ]]; then
-            release_tag=$(gh api --paginate --slurp \
+            selection=$(gh api --paginate --slurp \
               "repos/$GITHUB_REPOSITORY/releases?per_page=100" | \
-              jq -r 'add | map(select(.draft == false and .prerelease == false and (.tag_name | test("^web-bundle-[0-9]+-[0-9]+$")))) | sort_by(.published_at) | last | .tag_name // empty')
-            if [[ -n "$release_tag" ]]; then
-              gh release download "$release_tag" --repo "$GITHUB_REPOSITORY" \
-                --pattern web-bundle.tar.gz --dir "$RUNNER_TEMP/bundle-download"
-              archive_path="$RUNNER_TEMP/bundle-download/web-bundle.tar.gz"
-            fi
+              jq -c -f tool/select_bundles.jq)
+            channels=(production staging)
+            for index in 0 1; do
+              channel=${channels[$index]}
+              release_tag=$(jq -r --arg channel "$channel" '.[$channel]' <<< "$selection")
+              if [[ -n "$release_tag" ]]; then
+                download_path="$RUNNER_TEMP/bundle-download/$channel"
+                gh release download "$release_tag" --repo "$GITHUB_REPOSITORY" \
+                  --pattern web-bundle.tar.gz --dir "$download_path"
+                archive_paths[$index]="$download_path/web-bundle.tar.gz"
+              fi
+            done
           fi
-          bash tool/prepare_pages.sh "$archive_path" "$RUNNER_TEMP/pages"
-          echo "Static bundle: ${release_tag:-none (homepage only)}" >> "$GITHUB_STEP_SUMMARY"
+          bash tool/prepare_pages.sh "${archive_paths[0]}" "$RUNNER_TEMP/pages" "${archive_paths[1]}"
+          jq -r '"Primary bundle: \(.production)\nPreview bundle: \(.staging)"' <<< "$selection" >> "$GITHUB_STEP_SUMMARY"
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - name: Upload the complete website
